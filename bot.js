@@ -434,9 +434,20 @@ async function handleMessage(message) {
 async function handleInteraction(interaction) {
   try {
     if (!interaction.isChatInputCommand()) return;
-    if (interaction.commandName !== 'ask') return;
     recordUser(interaction.user);
     if (!RESPECTED_USERS.has(interaction.user.id) && BLOCKED_USERS.has(interaction.user.id)) return;
+
+    if (interaction.commandName === 'reset') {
+      const key = interaction.channel?.id || `dm:${interaction.user.id}`;
+      conversationMemory.delete(key);
+      lastUsedAt.delete(interaction.user.id);
+      lastMarinatedAt.delete(interaction.user.id);
+      console.log(`[reset] ${interaction.user.username} cleared conversation ${key}`);
+      await interaction.reply('Fresh start! I forgot everything we talked about — peel it all away. 🥔');
+      return;
+    }
+
+    if (interaction.commandName !== 'ask') return;
 
     const prompt = (interaction.options.getString('message') || '').slice(0, 1900);
     const key = interaction.channel?.id || `dm:${interaction.user.id}`;
@@ -471,11 +482,14 @@ client.once(Events.ClientReady, async (c) => {
         .setDescription('What do you want to say?')
         .setRequired(true),
     );
+  const resetCommand = new SlashCommandBuilder()
+    .setName('reset')
+    .setDescription('Forget this conversation and start fresh');
   try {
     await rest.put(Routes.applicationCommands(c.user.id), {
-      body: [askCommand.toJSON()],
+      body: [askCommand.toJSON(), resetCommand.toJSON()],
     });
-    console.log('Registered /ask slash command');
+    console.log('Registered /ask and /reset slash commands');
   } catch (err) {
     console.error('Failed to register /ask:', err.message);
   }
