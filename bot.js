@@ -246,6 +246,7 @@ const client = new Client({
 const conversationMemory = new Map();
 const lastUsedAt = new Map();
 const lastMarinatedAt = new Map();
+let fwogMode = false;
 
 function conversationKey(channel, authorId) {
   return channel.id || `dm:${authorId}`;
@@ -387,6 +388,12 @@ async function respond(key, authorId, userText, sink) {
       return;
     }
     addToHistory(key, 'user', userText);
+    if (fwogMode) {
+      addToHistory(key, 'assistant', 'Fwog');
+      await sink.typing();
+      await sink.send('Fwog');
+      return;
+    }
     const history = getHistory(key);
     const userContext = await buildUserContext(userText);
     const messages = [
@@ -534,6 +541,15 @@ async function handleInteraction(interaction) {
       return;
     }
 
+    if (interaction.commandName === 'fwog') {
+      fwogMode = !fwogMode;
+      console.log(`[fwog] ${interaction.user.username} set fwog mode to ${fwogMode}`);
+      await interaction.reply(
+        fwogMode ? 'Fwog.' : 'Fwog mode off — I can talk normally again. 🥔',
+      );
+      return;
+    }
+
     if (interaction.commandName !== 'ask') return;
 
     const prompt = (interaction.options.getString('message') || '').slice(0, 1900);
@@ -592,6 +608,9 @@ client.once(Events.ClientReady, async (c) => {
         .setDescription('Channel to stop responding in (leave empty to list active channels)')
         .setRequired(false),
     );
+  const fwogCommand = new SlashCommandBuilder()
+    .setName('fwog')
+    .setDescription('Toggle fwog mode (bot only ever says "Fwog")');
   try {
     await rest.put(Routes.applicationCommands(c.user.id), {
       body: [
@@ -599,9 +618,10 @@ client.once(Events.ClientReady, async (c) => {
         resetCommand.toJSON(),
         respondCommand.toJSON(),
         unrespondCommand.toJSON(),
+        fwogCommand.toJSON(),
       ],
     });
-    console.log('Registered /ask, /reset, /respond, and /unrespond slash commands');
+    console.log('Registered /ask, /reset, /respond, /unrespond, and /fwog slash commands');
   } catch (err) {
     console.error('Failed to register /ask:', err.message);
   }
