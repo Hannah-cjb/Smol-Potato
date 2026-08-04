@@ -8,6 +8,7 @@ import {
   Events,
   GatewayIntentBits,
   Partials,
+  PermissionFlagsBits,
   REST,
   Routes,
   SlashCommandBuilder,
@@ -478,6 +479,16 @@ async function handleInteraction(interaction) {
     }
 
     if (interaction.commandName === 'respond') {
+      const isAdmin =
+        !interaction.guild ||
+        interaction.memberPermissions?.has(PermissionFlagsBits.Administrator);
+      if (!isAdmin) {
+        await interaction.reply({
+          content: 'You need Administrator permission to use this command.',
+          ephemeral: true,
+        });
+        return;
+      }
       const channel = interaction.options.getChannel('channel');
       if (channel) {
         RESPOND_CHANNELS.add(channel.id);
@@ -533,7 +544,8 @@ client.once(Events.ClientReady, async (c) => {
     .setDescription('Forget this conversation and start fresh');
   const respondCommand = new SlashCommandBuilder()
     .setName('respond')
-    .setDescription('Auto-respond to every message in a channel')
+    .setDescription('Auto-respond to every message in a channel (admins only)')
+    .setDefaultMemberPermissions(PermissionFlagsBits.Administrator)
     .addChannelOption((opt) =>
       opt
         .setName('channel')
