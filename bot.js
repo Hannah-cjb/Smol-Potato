@@ -462,6 +462,13 @@ async function handleMessage(message) {
   }
 }
 
+function memberIsAdmin(interaction) {
+  return (
+    !interaction.guild ||
+    interaction.memberPermissions?.has(PermissionFlagsBits.Administrator)
+  );
+}
+
 async function handleInteraction(interaction) {
   try {
     if (!interaction.isChatInputCommand()) return;
@@ -479,10 +486,7 @@ async function handleInteraction(interaction) {
     }
 
     if (interaction.commandName === 'respond') {
-      const isAdmin =
-        !interaction.guild ||
-        interaction.memberPermissions?.has(PermissionFlagsBits.Administrator);
-      if (!isAdmin) {
+      if (!memberIsAdmin(interaction)) {
         await interaction.reply({
           content: 'You need Administrator permission to use this command.',
           ephemeral: true,
@@ -495,6 +499,32 @@ async function handleInteraction(interaction) {
         saveRespondChannels();
         console.log(`[respond] ${interaction.user.username} added channel ${channel.id}`);
         await interaction.reply(`Got it — I'll respond to every message in <#${channel.id}>.`);
+      } else {
+        const list = [...RESPOND_CHANNELS].map((id) => `<#${id}>`).join(', ');
+        await interaction.reply(
+          list ? `I'm currently responding in: ${list}` : `I'm not auto-responding in any channels.`,
+        );
+      }
+      return;
+    }
+
+    if (interaction.commandName === 'unrespond') {
+      if (!memberIsAdmin(interaction)) {
+        await interaction.reply({
+          content: 'You need Administrator permission to use this command.',
+          ephemeral: true,
+        });
+        return;
+      }
+      const channel = interaction.options.getChannel('channel');
+      if (channel) {
+        if (RESPOND_CHANNELS.delete(channel.id)) {
+          saveRespondChannels();
+          console.log(`[unrespond] ${interaction.user.username} removed channel ${channel.id}`);
+          await interaction.reply(`Okay — I'll stop responding in <#${channel.id}>.`);
+        } else {
+          await interaction.reply(`I wasn't auto-responding in <#${channel.id}> anyway.`);
+        }
       } else {
         const list = [...RESPOND_CHANNELS].map((id) => `<#${id}>`).join(', ');
         await interaction.reply(
@@ -552,11 +582,26 @@ client.once(Events.ClientReady, async (c) => {
         .setDescription('Channel to respond in (leave empty to list active channels)')
         .setRequired(false),
     );
+  const unrespondCommand = new SlashCommandBuilder()
+    .setName('unrespond')
+    .setDescription('Stop auto-responding in a channel (admins only)')
+    .setDefaultMemberPermissions(PermissionFlagsBits.Administrator)
+    .addChannelOption((opt) =>
+      opt
+        .setName('channel')
+        .setDescription('Channel to stop responding in (leave empty to list active channels)')
+        .setRequired(false),
+    );
   try {
     await rest.put(Routes.applicationCommands(c.user.id), {
-      body: [askCommand.toJSON(), resetCommand.toJSON(), respondCommand.toJSON()],
+      body: [
+        askCommand.toJSON(),
+        resetCommand.toJSON(),
+        respondCommand.toJSON(),
+        unrespondCommand.toJSON(),
+      ],
     });
-    console.log('Registered /ask, /reset, and /respond slash commands');
+    console.log('Registered /ask, /reset, /respond, and /unrespond slash commands');
   } catch (err) {
     console.error('Failed to register /ask:', err.message);
   }
