@@ -131,6 +131,35 @@ function loadRespectedUsers() {
 
 const RESPECTED_USERS = loadRespectedUsers();
 
+const RESPOND_CHANNELS = new Set();
+const respondChannelsPath = path.join(__dirname, 'respond-channels.txt');
+
+function loadRespondChannels() {
+  const channels = new Set();
+  const addId = (id) => {
+    const t = String(id).trim();
+    if (/^\d{15,20}$/.test(t)) channels.add(t);
+  };
+  try {
+    const content = fs.readFileSync(respondChannelsPath, 'utf8');
+    for (const line of content.split(/\r?\n/)) addId(line);
+  } catch {
+    // respond-channels.txt missing — fall through to env
+  }
+  for (const id of (process.env.RESPOND_CHANNELS || '').split(',')) addId(id);
+  return channels;
+}
+
+for (const id of loadRespondChannels()) RESPOND_CHANNELS.add(id);
+
+function saveRespondChannels() {
+  try {
+    fs.writeFileSync(respondChannelsPath, [...RESPOND_CHANNELS].join('\n'));
+  } catch (err) {
+    console.error('Failed to save respond channels:', err.message);
+  }
+}
+
 const knownUsers = new Map();
 
 function recordUser(user) {
@@ -404,6 +433,7 @@ async function handleMessage(message) {
     }
 
     const mentioned = message.mentions.has(client.user.id) && !message.mentions.everyone;
+    const autoRespond = !isDm && RESPOND_CHANNELS.has(message.channel.id);
     let repliedToBot = false;
     if (message.reference?.messageId && !isDm) {
       try {
@@ -414,7 +444,7 @@ async function handleMessage(message) {
       }
     }
 
-    if (!isDm && !mentioned && !repliedToBot) return;
+    if (!isDm && !mentioned && !repliedToBot && !autoRespond) return;
 
     console.log(
       `[trigger] ${message.author.username} in #${message.channel.id}${isDm ? ' (DM)' : ''}: ${message.content.slice(0, 80)}`,
@@ -444,6 +474,22 @@ async function handleInteraction(interaction) {
       lastMarinatedAt.delete(interaction.user.id);
       console.log(`[reset] ${interaction.user.username} cleared conversation ${key}`);
       await interaction.reply('Fresh start! I forgot everything we talked about — peel it all away. 🥔');
+      return;
+    }
+
+    if (interaction.commandName === 'respond') {
+      const channel = interaction.options.getChannel('channel');
+      if (channel) {
+        RESPOND_CHANNELS.add(channel.id);
+        saveRespondChannels();
+        console.log(`[respond] ${interaction.user.username} added channel ${channel.id}`);
+        await interaction.reply(`Got it — I'll respond to every message in <#${channel.id}>.`);
+      } else {
+        const list = [...RESPOND_CHANNELS].map((id) => `<#${id}>`).join(', ');
+        await interaction.reply(
+          list ? `I'm currently responding in: ${list}` : `I'm not auto-responding in any channels.`,
+        );
+      }
       return;
     }
 
@@ -485,11 +531,20 @@ client.once(Events.ClientReady, async (c) => {
   const resetCommand = new SlashCommandBuilder()
     .setName('reset')
     .setDescription('Forget this conversation and start fresh');
+  const respondCommand = new SlashCommandBuilder()
+    .setName('respond')
+    .setDescription('Auto-respond to every message in a channel')
+    .addChannelOption((opt) =>
+      opt
+        .setName('channel')
+        .setDescription('Channel to respond in (leave empty to list active channels)')
+        .setRequired(false),
+    );
   try {
     await rest.put(Routes.applicationCommands(c.user.id), {
-      body: [askCommand.toJSON(), resetCommand.toJSON()],
+      body: [askCommand.toJSON(), resetCommand.toJSON(), respondCommand.toJSON()],
     });
-    console.log('Registered /ask and /reset slash commands');
+    console.log('Registered /ask, /reset, and /respond slash commands');
   } catch (err) {
     console.error('Failed to register /ask:', err.message);
   }

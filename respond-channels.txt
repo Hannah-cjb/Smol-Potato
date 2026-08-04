@@ -1,0 +1,10 @@
+<!--
+  RESPOND CHANNELS
+
+  Smol Potato auto-responds to every message sent in these channels (no
+  @mention needed). One channel ID per line.
+
+  Add channels with the /respond command, or edit this file directly.
+  Edit, save, push — Render auto-deploys. To stop auto-responding in a
+  channel, delete its line. This comment block is ignored.
+-->
