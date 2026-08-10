@@ -161,6 +161,28 @@ function saveRespondChannels() {
   }
 }
 
+const KNOWN_USERS_FILE = path.join(__dirname, 'known-users.txt');
+const KNOWN_USERS = new Map();
+
+function loadKnownUsers() {
+  const users = new Map();
+  try {
+    const content = fs
+      .readFileSync(KNOWN_USERS_FILE, 'utf8')
+      .replace(/<!--[\s\S]*?-->/g, '');
+    for (const line of content.split(/\r?\n/)) {
+      const t = line.trim();
+      const m = t.match(/^(\d{15,20})\s+(\S.*)$/);
+      if (m) users.set(m[1], m[2].trim());
+    }
+  } catch {
+    // known-users.txt missing — fall through to empty map
+  }
+  return users;
+}
+
+for (const [id, name] of loadKnownUsers()) KNOWN_USERS.set(id, name);
+
 const knownUsers = new Map();
 
 function recordUser(user) {
@@ -170,6 +192,7 @@ function recordUser(user) {
 }
 
 async function resolveUserId(id) {
+  if (KNOWN_USERS.has(id)) return KNOWN_USERS.get(id);
   if (knownUsers.has(id)) return knownUsers.get(id);
   try {
     const user = await client.users.fetch(id);
@@ -210,9 +233,10 @@ async function buildUserContext(userText) {
       lines.push(`- ${id}: ${name}`);
     }
   }
-  if (knownUsers.size) {
+  const allKnown = new Map([...KNOWN_USERS, ...knownUsers]);
+  if (allKnown.size) {
     lines.push('## Known Discord users (ID to username)');
-    const entries = [...knownUsers.entries()].slice(0, 100).sort((a, b) => a[1].localeCompare(b[1]));
+    const entries = [...allKnown.entries()].slice(0, 200).sort((a, b) => a[1].localeCompare(b[1]));
     for (const [id, name] of entries) lines.push(`- ${id}: ${name}`);
   }
   if (!lines.length) return '';

@@ -1,0 +1,16 @@
+<!--
+  KNOWN USERS
+
+  Smol Potato uses this to recognize users by name (not just raw ID).
+  One user per line, format:
+
+      USERID Name
+
+  Example:
+      123456789012345678 Hannah
+      987654321098765432 Ninja
+
+  The name can include spaces. These names are fed to the AI in every
+  conversation so it knows who everyone is. Edit, save, push — Render
+  auto-deploys. This comment block is ignored.
+-->
