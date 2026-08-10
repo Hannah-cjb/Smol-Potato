@@ -204,11 +204,16 @@ async function resolveUserId(id) {
   }
 }
 
-async function buildUserContext(userText) {
+async function buildUserContext(userText, authorId) {
   for (const m of String(userText || '').match(/\d{15,20}/g) || []) {
     await resolveUserId(m);
   }
   const lines = [];
+  if (authorId) {
+    const speakerName = (await resolveUserId(authorId)) || 'unknown';
+    lines.push('## Current speaker');
+    lines.push(`- ${authorId}: ${speakerName}`);
+  }
   const blocked = [...BLOCKED_USERS].sort();
   const slow = [...SLOW_USERS].sort();
   if (blocked.length) {
@@ -411,7 +416,12 @@ async function respond(key, authorId, userText, sink) {
       }
       return;
     }
-    addToHistory(key, 'user', userText);
+    const speakerName = (await resolveUserId(authorId)) || null;
+    addToHistory(
+      key,
+      'user',
+      speakerName ? `[${speakerName}]: ${userText}` : userText,
+    );
     if (fwogMode) {
       addToHistory(key, 'assistant', 'Fwog');
       await sink.typing();
@@ -419,7 +429,7 @@ async function respond(key, authorId, userText, sink) {
       return;
     }
     const history = getHistory(key);
-    const userContext = await buildUserContext(userText);
+    const userContext = await buildUserContext(userText, authorId);
     const messages = [
       { role: 'system', content: SYSTEM_PROMPT + userContext },
       ...history.slice(-MAX_HISTORY),
